@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+CMAPI_KEY="${CMAPI_KEY:-somekey123}"
+MAXSCALE="${MAXSCALE:-false}"
+IFLAG='/etc/columnstore/container-initialized'
+PFLAG='/etc/columnstore/container-provisioned'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+HOSTS=( "$@" )
+if [[ "$#" -eq 0 ]]; then
+    HOSTS=(mcs1 mcs2 mcs3)
+fi
+
+EXPANDED=()
+for e in "${HOSTS[@]}"; do
+    EXPANDED+=("--node ${e}")
+done
+
+# Wait For Primary Node To Start
+if [[ ! -f ${IFLAG} ]]; then
+    echo -n 'Waiting for PM1 To Be Initialized '
+    while [[ ! -f ${IFLAG} ]]
+    do
+        printf "."
+        sleep 2
+    done
+    echo -e " ${GREEN}done${NC}"
+fi
+
+sleep 3
+
+# Set API Key
+if ! mcs cluster set api-key --key "${CMAPI_KEY}" > /dev/null 2>&1; then
+    echo "Failed Setting API Key"
+    exit 1
+fi
+
+# Add Nodes To System
+if mcs cluster node add "${EXPANDED[@]}" > /dev/null 2>&1; then
+    echo -e "Adding PMs To Cluster ... ${GREEN}done${NC}"
+else
+    echo -e "Adding PMs To Cluster ... ${RED}fail${NC}"
+    exit 1
+fi
+
+if [[ ${MAXSCALE} == true ]]; then
+    provision-mxs
+fi
+
+# Restart Cluster
+if mcs cluster restart > /dev/null 2>&1; then
+    echo -e "Restarting Cluster ... ${GREEN}done${NC}"
+else
+    echo -e "Restarting Cluster ... ${RED}fail${NC}"
+    exit 1
+fi
+
+# Validate
+QUERY=$(mariadb -sN -e "DROP DATABASE IF EXISTS validate; CREATE DATABASE validate; CREATE TABLE validate.sample (id INT) ENGINE=columnstore; INSERT INTO validate.sample VALUES (99); SELECT id FROM validate.sample;" 2>&1)
+if [[ ${QUERY} = 99 ]]; then
+    echo -e "Validating ColumnStore Engine ... ${GREEN}done${NC}"
+    mariadb -e "DROP DATABASE IF EXISTS validate;" 2>&1
+else
+    echo -e "Validating ColumnStore Engine ... ${RED}fail${NC}"
+    exit 1
+fi
+
+touch "${PFLAG}"
