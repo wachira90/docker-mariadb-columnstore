@@ -20,7 +20,7 @@ Also make sure to grab your download credentials from our website:
 
 ## Quick Start Instructions (All)
 
-*   ```$ git clone https://github.com/mariadb-corporation/mariadb-columnstore-docker.git```
+*   ```$ git clone https://github.com/wachira90/docker-mariadb-columnstore.git```
 *   ```$ cd mariadb-columnstore-docker```
 *   ```$ cp .env_example .env```
 *   ```$ cp .secrets_example```
